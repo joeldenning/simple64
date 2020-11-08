@@ -302,6 +302,9 @@ static int savestates_load_m64p(struct device* dev, char *filepath)
     gzclose(f);
     SDL_UnlockMutex(savestates_lock);
 
+    struct timespec begin, end;
+    clock_gettime(CLOCK_REALTIME, &begin);
+
     // Parse savestate
     dev->rdram.regs[0][RDRAM_CONFIG_REG]       = GETDATA(curr, uint32_t);
     dev->rdram.regs[0][RDRAM_DEVICE_ID_REG]    = GETDATA(curr, uint32_t);
@@ -929,6 +932,12 @@ static int savestates_load_m64p(struct device* dev, char *filepath)
 
     *r4300_cp0_last_addr(&dev->r4300.cp0) = *r4300_pc(&dev->r4300);
 
+    clock_gettime(CLOCK_REALTIME, &end);
+    long endMs = round(end.tv_nsec / 1.0e6);
+    long beginMs = round(begin.tv_nsec / 1.0e6);
+    printf("Load state: %ld ms\n", endMs - beginMs);
+    fflush(stdout);
+
     free(savestateData);
     main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "State loaded from: %s", namefrompath(filepath));
     return 1;
@@ -1489,45 +1498,21 @@ static void savestates_save_m64p_work(struct work_struct *work)
     SDL_UnlockMutex(savestates_lock);
 }
 
-static int savestates_save_m64p(const struct device* dev, char *filepath)
+int savestates_save_m64p_mem(const struct device* dev, char* curr, int isRollback)
 {
-    unsigned char outbuf[4];
+    // printf("save mem\n");
+    // fflush(stdout);
     int i;
     uint64_t flashram_status;
-
+    unsigned char outbuf[4];
+    struct timespec begin, end;
     char queue[1024];
-
-    struct savestate_work *save;
-    char *curr;
-
-    /* OK to cast away const qualifier */
-    const uint32_t* cp0_regs = r4300_cp0_regs((struct cp0*)&dev->r4300.cp0);
-
-    save = malloc(sizeof(*save));
-    if (!save) {
-        main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "Insufficient memory to save state.");
-        return 0;
-    }
-
-    save->filepath = strdup(filepath);
-
-    if(autoinc_save_slot)
-        savestates_inc_slot();
+    clock_gettime(CLOCK_REALTIME, &begin);
 
     save_eventqueue_infos(&dev->r4300.cp0, queue);
 
-    // Allocate memory for the save state data
-    save->size = 16788288 + sizeof(queue) + 4 + 4096;
-    save->data = curr = malloc(save->size);
-    if (save->data == NULL)
-    {
-        free(save->filepath);
-        free(save);
-        main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "Insufficient memory to save state.");
-        return 0;
-    }
-
-    memset(save->data, 0, save->size);
+    /* OK to cast away const qualifier */
+    const uint32_t* cp0_regs = r4300_cp0_regs((struct cp0*)&dev->r4300.cp0);
 
     // Write the save state data to memory
     PUTARRAY(savestate_magic, curr, unsigned char, 8);
@@ -1538,7 +1523,9 @@ static int savestates_save_m64p(const struct device* dev, char *filepath)
     outbuf[3] = (savestate_latest_version >>  0) & 0xff;
     PUTARRAY(outbuf, curr, unsigned char, 4);
 
-    PUTARRAY(ROM_SETTINGS.MD5, curr, char, 32);
+    if (!isRollback) {
+        PUTARRAY(ROM_SETTINGS.MD5, curr, char, 32);
+    }
 
     PUTDATA(curr, uint32_t, dev->rdram.regs[0][RDRAM_CONFIG_REG]);
     PUTDATA(curr, uint32_t, dev->rdram.regs[0][RDRAM_DEVICE_ID_REG]);
@@ -1680,9 +1667,11 @@ static int savestates_save_m64p(const struct device* dev, char *filepath)
     PUTDATA(curr, uint32_t, dev->dp.dps_regs[DPS_BUFTEST_ADDR_REG]);
     PUTDATA(curr, uint32_t, dev->dp.dps_regs[DPS_BUFTEST_DATA_REG]);
 
-    PUTARRAY(dev->rdram.dram, curr, uint32_t, RDRAM_MAX_SIZE/4);
-    PUTARRAY(dev->sp.mem, curr, uint32_t, SP_MEM_SIZE/4);
-    PUTARRAY(dev->pif.ram, curr, uint8_t, PIF_RAM_SIZE);
+    if (!isRollback) {
+        PUTARRAY(dev->rdram.dram, curr, uint32_t, RDRAM_MAX_SIZE/4);
+        PUTARRAY(dev->sp.mem, curr, uint32_t, SP_MEM_SIZE/4);
+        PUTARRAY(dev->pif.ram, curr, uint8_t, PIF_RAM_SIZE);
+    }
 
     PUTDATA(curr, int32_t, dev->cart.use_flashram);
     PUTDATA(curr, int32_t, dev->cart.flashram.mode);
@@ -1691,18 +1680,24 @@ static int savestates_save_m64p(const struct device* dev, char *filepath)
     PUTDATA(curr, uint32_t, dev->cart.flashram.erase_offset);
     PUTDATA(curr, uint32_t, dev->cart.flashram.write_pointer);
 
-    PUTARRAY(dev->r4300.cp0.tlb.LUT_r, curr, uint32_t, 0x100000);
-    PUTARRAY(dev->r4300.cp0.tlb.LUT_w, curr, uint32_t, 0x100000);
+    if (!isRollback) {
+        PUTARRAY(dev->r4300.cp0.tlb.LUT_r, curr, uint32_t, 0x100000);
+        PUTARRAY(dev->r4300.cp0.tlb.LUT_w, curr, uint32_t, 0x100000);
+    }
 
     /* OK to cast away const qualifier */
     PUTDATA(curr, uint32_t, *r4300_llbit((struct r4300_core*)&dev->r4300));
-    PUTARRAY(r4300_regs((struct r4300_core*)&dev->r4300), curr, int64_t, 32);
-    PUTARRAY(cp0_regs, curr, uint32_t, CP0_REGS_COUNT);
+    if (!isRollback) {
+        PUTARRAY(r4300_regs((struct r4300_core*)&dev->r4300), curr, int64_t, 32);
+        PUTARRAY(cp0_regs, curr, uint32_t, CP0_REGS_COUNT);
+    }
     PUTDATA(curr, int64_t, *r4300_mult_lo((struct r4300_core*)&dev->r4300));
     PUTDATA(curr, int64_t, *r4300_mult_hi((struct r4300_core*)&dev->r4300));
 
-    const cp1_reg *cp1_regs = r4300_cp1_regs((struct cp1*)&dev->r4300.cp1);
-    PUTARRAY(&cp1_regs->dword, curr, int64_t, 32);
+    if (!isRollback) {
+        const cp1_reg *cp1_regs = r4300_cp1_regs((struct cp1*)&dev->r4300.cp1);
+        PUTARRAY(&cp1_regs->dword, curr, int64_t, 32);
+    }
 
     PUTDATA(curr, uint32_t, *r4300_cp1_fcr0((struct cp1*)&dev->r4300.cp1));
     PUTDATA(curr, uint32_t, *r4300_cp1_fcr31((struct cp1*)&dev->r4300.cp1));
@@ -1790,10 +1785,12 @@ static int savestates_save_m64p(const struct device* dev, char *filepath)
             PUTDATA(curr, uint32_t, dev->transferpaks[i].gb_cart->rtc.latch);
             PUTDATA(curr, int64_t, dev->transferpaks[i].gb_cart->rtc.last_time);
 
-            PUTARRAY(dev->transferpaks[i].gb_cart->rtc.regs, curr, uint8_t, MBC3_RTC_REGS_COUNT);
-            PUTARRAY(dev->transferpaks[i].gb_cart->rtc.latched_regs, curr, uint8_t, MBC3_RTC_REGS_COUNT);
+            if (!isRollback) {
+                PUTARRAY(dev->transferpaks[i].gb_cart->rtc.regs, curr, uint8_t, MBC3_RTC_REGS_COUNT);
+                PUTARRAY(dev->transferpaks[i].gb_cart->rtc.latched_regs, curr, uint8_t, MBC3_RTC_REGS_COUNT);
 
-            PUTARRAY(dev->transferpaks[i].gb_cart->cam.regs, curr, uint8_t, POCKET_CAM_REGS_COUNT);
+                PUTARRAY(dev->transferpaks[i].gb_cart->cam.regs, curr, uint8_t, POCKET_CAM_REGS_COUNT);
+            }
         }
     }
 
@@ -1853,8 +1850,10 @@ static int savestates_save_m64p(const struct device* dev, char *filepath)
         PUTDATA(curr, uint32_t, dev->dd.regs[DD_ASIC_TEST_REG]);
         PUTDATA(curr, uint32_t, dev->dd.regs[DD_ASIC_TEST_PIN_SEL]);
 
-        PUTARRAY(dev->dd.ds_buf, curr, uint8_t, 0x100);
-        PUTARRAY(dev->dd.ms_ram, curr, uint8_t, 0x40);
+        if (!isRollback) {
+            PUTARRAY(dev->dd.ds_buf, curr, uint8_t, 0x100);
+            PUTARRAY(dev->dd.ms_ram, curr, uint8_t, 0x40);
+        }
 
         PUTDATA(curr, int64_t, (int64_t)dev->dd.rtc.now);
         PUTDATA(curr, int64_t, (int64_t)dev->dd.rtc.last_update_rtc);
@@ -1879,10 +1878,51 @@ static int savestates_save_m64p(const struct device* dev, char *filepath)
     PUTDATA(curr, uint32_t, dev->sp.fifo[1].memaddr);
     PUTDATA(curr, uint32_t, dev->sp.fifo[1].dramaddr);
 
+    clock_gettime(CLOCK_REALTIME, &end);
+    long endMs = round(end.tv_nsec / 1.0e6);
+    long beginMs = round(begin.tv_nsec / 1.0e6);
+    // printf("Save time: %ld ms\n", endMs - beginMs);
+    // fflush(stdout);
+
+    return 1;
+}
+
+static int savestates_save_m64p(const struct device* dev, char *filepath)
+{
+
+    fflush(stdout);
+    struct savestate_work *save;
+    char *curr;
+
+    save = malloc(sizeof(*save));
+    if (!save) {
+        main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "Insufficient memory to save state.");
+        return 0;
+    }
+
+    save->filepath = strdup(filepath);
+
+    if(autoinc_save_slot)
+        savestates_inc_slot();
+
+    // Allocate memory for the save state data
+    char queue[1024];
+    save->size = 16788288 + sizeof(queue) + 4 + 4096;
+    save->data = curr = malloc(save->size);
+    if (save->data == NULL)
+    {
+        free(save->filepath);
+        free(save);
+        main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "Insufficient memory to save state.");
+        return 0;
+    }
+    memset(save->data, 0, save->size);
+    int result = savestates_save_m64p_mem(dev, curr, 0);
+
     init_work(&save->work, savestates_save_m64p_work);
     queue_work(&save->work);
 
-    return 1;
+    return result;
 }
 
 static int savestates_save_pj64(const struct device* dev,

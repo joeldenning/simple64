@@ -96,6 +96,7 @@ m64p_frame_callback g_FrameCallback = NULL;
 int         g_RomWordsLittleEndian = 0; // after loading, ROM words are in native N64 byte order (big endian). We will swap them on x86
 int         g_EmulatorRunning = 0;      // need separate boolean to tell if emulator is running, since --nogui doesn't use a thread
 
+char *saveAddress;
 
 int g_rom_pause;
 
@@ -183,6 +184,10 @@ static char *get_gb_ram_path(const char* gbrom, unsigned int control_id)
 static m64p_error init_video_capture_backend(const struct video_capture_backend_interface** ivcap, void** vcap, m64p_handle config, const char* key)
 {
     m64p_error err;
+    // temp
+    char queue[1024];
+    char saveSize = 16788288 + sizeof(queue) + 4 + 4096;
+    saveAddress = malloc(saveSize);
 
     const char* name = ConfigGetParamString(config, key);
     if (name == NULL) {
@@ -453,6 +458,7 @@ void main_toggle_pause(void)
     g_rom_pause = !g_rom_pause;
     l_FrameAdvance = 0;
 }
+
 
 void main_advance_one(void)
 {
@@ -798,6 +804,7 @@ void new_frame(void)
 
     /* advance the current frame */
     l_CurrentFrame++;
+    savestates_save_m64p_mem(&g_dev, saveAddress, 1);
 
     if (l_FrameAdvance) {
         g_rom_pause = 1;
