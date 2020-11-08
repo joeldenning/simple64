@@ -186,7 +186,7 @@ static m64p_error init_video_capture_backend(const struct video_capture_backend_
     m64p_error err;
     // temp
     char queue[1024];
-    char saveSize = 16788288 + sizeof(queue) + 4 + 4096;
+    int saveSize = 16788288 + sizeof(queue) + 4 + 4096;
     saveAddress = malloc(saveSize);
 
     const char* name = ConfigGetParamString(config, key);
@@ -804,7 +804,7 @@ void new_frame(void)
 
     /* advance the current frame */
     l_CurrentFrame++;
-    savestates_save_m64p_mem(&g_dev, saveAddress, 1);
+    savestates_save_m64p_mem(&g_dev, saveAddress);
 
     if (l_FrameAdvance) {
         g_rom_pause = 1;

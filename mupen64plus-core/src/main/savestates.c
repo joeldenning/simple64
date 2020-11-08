@@ -182,6 +182,10 @@ static void savestates_clear_job(void)
 #define PUTDATA(buff, type, value) \
     do { type x = value; PUTARRAY(&x, buff, type, 1); } while(0)
 
+int savestates_load_m64p_mem(const struct device* dev, char* curr)
+{
+}
+
 static int savestates_load_m64p(struct device* dev, char *filepath)
 {
     unsigned char header[44];
@@ -1498,7 +1502,7 @@ static void savestates_save_m64p_work(struct work_struct *work)
     SDL_UnlockMutex(savestates_lock);
 }
 
-int savestates_save_m64p_mem(const struct device* dev, char* curr, int isRollback)
+int savestates_save_m64p_mem(const struct device* dev, char* curr)
 {
     // printf("save mem\n");
     // fflush(stdout);
@@ -1523,9 +1527,7 @@ int savestates_save_m64p_mem(const struct device* dev, char* curr, int isRollbac
     outbuf[3] = (savestate_latest_version >>  0) & 0xff;
     PUTARRAY(outbuf, curr, unsigned char, 4);
 
-    if (!isRollback) {
-        PUTARRAY(ROM_SETTINGS.MD5, curr, char, 32);
-    }
+    PUTARRAY(ROM_SETTINGS.MD5, curr, char, 32);
 
     PUTDATA(curr, uint32_t, dev->rdram.regs[0][RDRAM_CONFIG_REG]);
     PUTDATA(curr, uint32_t, dev->rdram.regs[0][RDRAM_DEVICE_ID_REG]);
@@ -1667,11 +1669,16 @@ int savestates_save_m64p_mem(const struct device* dev, char* curr, int isRollbac
     PUTDATA(curr, uint32_t, dev->dp.dps_regs[DPS_BUFTEST_ADDR_REG]);
     PUTDATA(curr, uint32_t, dev->dp.dps_regs[DPS_BUFTEST_DATA_REG]);
 
-    if (!isRollback) {
-        PUTARRAY(dev->rdram.dram, curr, uint32_t, RDRAM_MAX_SIZE/4);
-        PUTARRAY(dev->sp.mem, curr, uint32_t, SP_MEM_SIZE/4);
-        PUTARRAY(dev->pif.ram, curr, uint8_t, PIF_RAM_SIZE);
-    }
+
+    // int count = 1;
+    int count = RDRAM_MAX_SIZE/4;
+    int theSize = sizeof(uint32_t);
+    // memcpy(curr, dev->rdram.dram, sizeof(uint32_t)*count);
+    // to_little_endian_buffer(curr, sizeof(uint32_t), count);
+    // curr += count*sizeof(uint32_t);
+    PUTARRAY(dev->rdram.dram, curr, theSize, count);
+    PUTARRAY(dev->sp.mem, curr, uint32_t, SP_MEM_SIZE/4);
+    PUTARRAY(dev->pif.ram, curr, uint8_t, PIF_RAM_SIZE);
 
     PUTDATA(curr, int32_t, dev->cart.use_flashram);
     PUTDATA(curr, int32_t, dev->cart.flashram.mode);
@@ -1680,24 +1687,18 @@ int savestates_save_m64p_mem(const struct device* dev, char* curr, int isRollbac
     PUTDATA(curr, uint32_t, dev->cart.flashram.erase_offset);
     PUTDATA(curr, uint32_t, dev->cart.flashram.write_pointer);
 
-    if (!isRollback) {
-        PUTARRAY(dev->r4300.cp0.tlb.LUT_r, curr, uint32_t, 0x100000);
-        PUTARRAY(dev->r4300.cp0.tlb.LUT_w, curr, uint32_t, 0x100000);
-    }
+    PUTARRAY(dev->r4300.cp0.tlb.LUT_r, curr, uint32_t, 0x100000);
+    PUTARRAY(dev->r4300.cp0.tlb.LUT_w, curr, uint32_t, 0x100000);
 
     /* OK to cast away const qualifier */
     PUTDATA(curr, uint32_t, *r4300_llbit((struct r4300_core*)&dev->r4300));
-    if (!isRollback) {
-        PUTARRAY(r4300_regs((struct r4300_core*)&dev->r4300), curr, int64_t, 32);
-        PUTARRAY(cp0_regs, curr, uint32_t, CP0_REGS_COUNT);
-    }
+    PUTARRAY(r4300_regs((struct r4300_core*)&dev->r4300), curr, int64_t, 32);
+    PUTARRAY(cp0_regs, curr, uint32_t, CP0_REGS_COUNT);
     PUTDATA(curr, int64_t, *r4300_mult_lo((struct r4300_core*)&dev->r4300));
     PUTDATA(curr, int64_t, *r4300_mult_hi((struct r4300_core*)&dev->r4300));
 
-    if (!isRollback) {
-        const cp1_reg *cp1_regs = r4300_cp1_regs((struct cp1*)&dev->r4300.cp1);
-        PUTARRAY(&cp1_regs->dword, curr, int64_t, 32);
-    }
+    const cp1_reg *cp1_regs = r4300_cp1_regs((struct cp1*)&dev->r4300.cp1);
+    PUTARRAY(&cp1_regs->dword, curr, int64_t, 32);
 
     PUTDATA(curr, uint32_t, *r4300_cp1_fcr0((struct cp1*)&dev->r4300.cp1));
     PUTDATA(curr, uint32_t, *r4300_cp1_fcr31((struct cp1*)&dev->r4300.cp1));
@@ -1785,12 +1786,10 @@ int savestates_save_m64p_mem(const struct device* dev, char* curr, int isRollbac
             PUTDATA(curr, uint32_t, dev->transferpaks[i].gb_cart->rtc.latch);
             PUTDATA(curr, int64_t, dev->transferpaks[i].gb_cart->rtc.last_time);
 
-            if (!isRollback) {
-                PUTARRAY(dev->transferpaks[i].gb_cart->rtc.regs, curr, uint8_t, MBC3_RTC_REGS_COUNT);
-                PUTARRAY(dev->transferpaks[i].gb_cart->rtc.latched_regs, curr, uint8_t, MBC3_RTC_REGS_COUNT);
+            PUTARRAY(dev->transferpaks[i].gb_cart->rtc.regs, curr, uint8_t, MBC3_RTC_REGS_COUNT);
+            PUTARRAY(dev->transferpaks[i].gb_cart->rtc.latched_regs, curr, uint8_t, MBC3_RTC_REGS_COUNT);
 
-                PUTARRAY(dev->transferpaks[i].gb_cart->cam.regs, curr, uint8_t, POCKET_CAM_REGS_COUNT);
-            }
+            PUTARRAY(dev->transferpaks[i].gb_cart->cam.regs, curr, uint8_t, POCKET_CAM_REGS_COUNT);
         }
     }
 
@@ -1850,10 +1849,8 @@ int savestates_save_m64p_mem(const struct device* dev, char* curr, int isRollbac
         PUTDATA(curr, uint32_t, dev->dd.regs[DD_ASIC_TEST_REG]);
         PUTDATA(curr, uint32_t, dev->dd.regs[DD_ASIC_TEST_PIN_SEL]);
 
-        if (!isRollback) {
-            PUTARRAY(dev->dd.ds_buf, curr, uint8_t, 0x100);
-            PUTARRAY(dev->dd.ms_ram, curr, uint8_t, 0x40);
-        }
+        PUTARRAY(dev->dd.ds_buf, curr, uint8_t, 0x100);
+        PUTARRAY(dev->dd.ms_ram, curr, uint8_t, 0x40);
 
         PUTDATA(curr, int64_t, (int64_t)dev->dd.rtc.now);
         PUTDATA(curr, int64_t, (int64_t)dev->dd.rtc.last_update_rtc);
@@ -1917,7 +1914,7 @@ static int savestates_save_m64p(const struct device* dev, char *filepath)
         return 0;
     }
     memset(save->data, 0, save->size);
-    int result = savestates_save_m64p_mem(dev, curr, 0);
+    int result = savestates_save_m64p_mem(dev, curr);
 
     init_work(&save->work, savestates_save_m64p_work);
     queue_work(&save->work);
