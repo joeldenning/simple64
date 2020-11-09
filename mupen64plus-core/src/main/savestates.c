@@ -182,10 +182,9 @@ static void savestates_clear_job(void)
 #define PUTDATA(buff, type, value) \
     do { type x = value; PUTARRAY(&x, buff, type, 1); } while(0)
 
-int savestates_load_m64p_mem(struct device* dev, char* curr, unsigned int version, unsigned char *using_tlb_data, unsigned char *data_0001_0200)
+static int savestates_load_m64p_dev(struct device* dev, char* curr, unsigned int version, unsigned char *using_tlb_data, unsigned char *data_0001_0200, char* queue)
 {
     uint32_t FCR31;
-    char queue[1024];
     uint64_t flashram_status;
 
     uint32_t* cp0_regs = r4300_cp0_regs(&dev->r4300.cp0);
@@ -380,7 +379,7 @@ int savestates_load_m64p_mem(struct device* dev, char* curr, unsigned int versio
 
     if (version >= 0x00010100)
     {
-        curr = *using_tlb_data;
+        curr = using_tlb_data;
         using_tlb = GETDATA(curr, uint32_t);
     }
 #endif
@@ -396,7 +395,7 @@ int savestates_load_m64p_mem(struct device* dev, char* curr, unsigned int versio
 #define ALIGNED_GETDATA(buff, type) \
     (COPYARRAY(aligned.bytes, buff, uint8_t, sizeof(type)), *(type*)aligned.bytes)
 
-        curr = *data_0001_0200;
+        curr = data_0001_0200;
 
         /* extra ai state */
         dev->ai.last_read = GETDATA(curr, uint32_t);
@@ -536,7 +535,7 @@ int savestates_load_m64p_mem(struct device* dev, char* curr, unsigned int versio
     }
     else if (version >= 0x00010300)
     {
-        curr = *data_0001_0200;
+        curr = data_0001_0200;
 
         /* extra ai state */
         dev->ai.last_read = GETDATA(curr, uint32_t);
@@ -827,6 +826,48 @@ int savestates_load_m64p_mem(struct device* dev, char* curr, unsigned int versio
     fflush(stdout);
 }
 
+int savestates_load_m64p_mem(struct device* dev, char* curr)
+{
+    printf("First bytes: %.*s", 8, curr);
+    unsigned int version;
+    unsigned char *using_tlb_data, *data_0001_0200;
+    char *queue;
+    // unsigned char using_tlb_data[4];
+    // unsigned char data_0001_0200[4096]; // 4k for extra state from v1.2
+    // char queue[1024];
+    size_t savestateSize = 16788244;
+
+    // Skip the magic number
+    if(strncmp(curr, savestate_magic, 8)!=0)
+    {
+        printf("State is not a valid Mupen64plus savestate.");
+    }
+
+    // Skip the magic string
+    curr += 8;
+
+    version = *curr++;
+    version = (version << 8) | *curr++;
+    version = (version << 8) | *curr++;
+    version = (version << 8) | *curr++;
+
+    printf("Version: expected: %#08x, actual: %#08x\n", 0x00010700, version);
+    fflush(stdout);
+
+    // Skip the rest of the header
+    curr += 36;
+
+    // Skip the savestate to determine queue address
+    queue = curr + savestateSize;
+    using_tlb_data = queue + sizeof(char[1024]);
+    data_0001_0200 = using_tlb_data + sizeof(char[4]);
+    // memcpy(queue, curr, sizeof(queue));
+    // memcpy(using_tlb_data, curr + sizeof(queue), sizeof(using_tlb_data));
+    // memcpy(data_0001_0200, curr + sizeof(queue) + sizeof(data_0001_0200), sizeof(data_0001_0200));
+
+    return savestates_load_m64p_dev(dev, curr, version, using_tlb_data, data_0001_0200, queue);
+}
+
 static int savestates_load_m64p(struct device* dev, char *filepath)
 {
     char queue[1024];
@@ -942,7 +983,7 @@ static int savestates_load_m64p(struct device* dev, char *filepath)
     gzclose(f);
     SDL_UnlockMutex(savestates_lock);
 
-    savestates_load_m64p_mem(dev, curr, version, &using_tlb_data, &data_0001_0200);
+    savestates_load_m64p_dev(dev, curr, version, using_tlb_data, data_0001_0200, queue);
 
     free(savestateData);
     main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "State loaded from: %s", namefrompath(filepath));

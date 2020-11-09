@@ -47,7 +47,7 @@ void savestates_deinit(void);
 
 int savestates_load(void);
 int savestates_save(void);
-int savestates_load_m64p_mem(struct device* dev, char* curr, unsigned int version, unsigned char *using_tlb_data, unsigned char *data_0001_0200);
+int savestates_load_m64p_mem(struct device* dev, char* curr);
 int savestates_save_m64p_mem(const struct device* dev, char* curr);
 
 void savestates_select_slot(unsigned int s);
