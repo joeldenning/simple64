@@ -182,130 +182,14 @@ static void savestates_clear_job(void)
 #define PUTDATA(buff, type, value) \
     do { type x = value; PUTARRAY(&x, buff, type, 1); } while(0)
 
-int savestates_load_m64p_mem(const struct device* dev, char* curr)
+int savestates_load_m64p_mem(struct device* dev, char* curr, unsigned int version, unsigned char *using_tlb_data, unsigned char *data_0001_0200)
 {
-}
-
-static int savestates_load_m64p(struct device* dev, char *filepath)
-{
-    unsigned char header[44];
-    gzFile f;
-    unsigned int version;
-    int i;
     uint32_t FCR31;
-
-    size_t savestateSize;
-    unsigned char *savestateData, *curr;
     char queue[1024];
-    unsigned char using_tlb_data[4];
-    unsigned char data_0001_0200[4096]; // 4k for extra state from v1.2
     uint64_t flashram_status;
 
     uint32_t* cp0_regs = r4300_cp0_regs(&dev->r4300.cp0);
-
-    SDL_LockMutex(savestates_lock);
-
-    f = gzopen(filepath, "rb");
-    if(f==NULL)
-    {
-        main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "Could not open state file: %s", filepath);
-        SDL_UnlockMutex(savestates_lock);
-        return 0;
-    }
-
-    /* Read and check Mupen64Plus magic number. */
-    if (gzread(f, header, 44) != 44)
-    {
-        main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "Could not read header from state file %s", filepath);
-        gzclose(f);
-        SDL_UnlockMutex(savestates_lock);
-        return 0;
-    }
-    curr = header;
-
-    if(strncmp((char *)curr, savestate_magic, 8)!=0)
-    {
-        main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "State file: %s is not a valid Mupen64plus savestate.", filepath);
-        gzclose(f);
-        SDL_UnlockMutex(savestates_lock);
-        return 0;
-    }
-    curr += 8;
-
-    version = *curr++;
-    version = (version << 8) | *curr++;
-    version = (version << 8) | *curr++;
-    version = (version << 8) | *curr++;
-    if((version >> 16) != (savestate_latest_version >> 16))
-    {
-        main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "State version (%08x) isn't compatible. Please update Mupen64Plus.", version);
-        gzclose(f);
-        SDL_UnlockMutex(savestates_lock);
-        return 0;
-    }
-
-    if(memcmp((char *)curr, ROM_SETTINGS.MD5, 32))
-    {
-        main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "State ROM MD5 does not match current ROM.");
-        gzclose(f);
-        SDL_UnlockMutex(savestates_lock);
-        return 0;
-    }
-    curr += 32;
-
-    /* Read the rest of the savestate */
-    savestateSize = 16788244;
-    savestateData = curr = (unsigned char *)malloc(savestateSize);
-    if (savestateData == NULL)
-    {
-        main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "Insufficient memory to load state.");
-        gzclose(f);
-        SDL_UnlockMutex(savestates_lock);
-        return 0;
-    }
-    if (version == 0x00010000) /* original savestate version */
-    {
-        if (gzread(f, savestateData, savestateSize) != (int)savestateSize ||
-            (gzread(f, queue, sizeof(queue)) % 4) != 0)
-        {
-            main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "Could not read Mupen64Plus savestate 1.0 data from %s", filepath);
-            free(savestateData);
-            gzclose(f);
-            SDL_UnlockMutex(savestates_lock);
-            return 0;
-        }
-    }
-    else if (version == 0x00010100) // saves entire eventqueue plus 4-byte using_tlb flags
-    {
-        if (gzread(f, savestateData, savestateSize) != (int)savestateSize ||
-            gzread(f, queue, sizeof(queue)) != sizeof(queue) ||
-            gzread(f, using_tlb_data, sizeof(using_tlb_data)) != sizeof(using_tlb_data))
-        {
-            main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "Could not read Mupen64Plus savestate 1.1 data from %s", filepath);
-            free(savestateData);
-            gzclose(f);
-            SDL_UnlockMutex(savestates_lock);
-            return 0;
-        }
-    }
-    else // version >= 0x00010200  saves entire eventqueue, 4-byte using_tlb flags and extra state
-    {
-        if (gzread(f, savestateData, savestateSize) != (int)savestateSize ||
-            gzread(f, queue, sizeof(queue)) != sizeof(queue) ||
-            gzread(f, using_tlb_data, sizeof(using_tlb_data)) != sizeof(using_tlb_data) ||
-            gzread(f, data_0001_0200, sizeof(data_0001_0200)) != sizeof(data_0001_0200))
-        {
-            main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "Could not read Mupen64Plus savestate 1.2+ data from %s", filepath);
-            free(savestateData);
-            gzclose(f);
-            SDL_UnlockMutex(savestates_lock);
-            return 0;
-        }
-    }
-
-    gzclose(f);
-    SDL_UnlockMutex(savestates_lock);
-
+    int i;
     struct timespec begin, end;
     clock_gettime(CLOCK_REALTIME, &begin);
 
@@ -496,7 +380,7 @@ static int savestates_load_m64p(struct device* dev, char *filepath)
 
     if (version >= 0x00010100)
     {
-        curr = using_tlb_data;
+        curr = *using_tlb_data;
         using_tlb = GETDATA(curr, uint32_t);
     }
 #endif
@@ -512,7 +396,7 @@ static int savestates_load_m64p(struct device* dev, char *filepath)
 #define ALIGNED_GETDATA(buff, type) \
     (COPYARRAY(aligned.bytes, buff, uint8_t, sizeof(type)), *(type*)aligned.bytes)
 
-        curr = data_0001_0200;
+        curr = *data_0001_0200;
 
         /* extra ai state */
         dev->ai.last_read = GETDATA(curr, uint32_t);
@@ -652,7 +536,7 @@ static int savestates_load_m64p(struct device* dev, char *filepath)
     }
     else if (version >= 0x00010300)
     {
-        curr = data_0001_0200;
+        curr = *data_0001_0200;
 
         /* extra ai state */
         dev->ai.last_read = GETDATA(curr, uint32_t);
@@ -941,6 +825,124 @@ static int savestates_load_m64p(struct device* dev, char *filepath)
     long beginMs = round(begin.tv_nsec / 1.0e6);
     printf("Load state: %ld ms\n", endMs - beginMs);
     fflush(stdout);
+}
+
+static int savestates_load_m64p(struct device* dev, char *filepath)
+{
+    char queue[1024];
+    unsigned char header[44];
+    gzFile f;
+    unsigned int version;
+    unsigned char using_tlb_data[4];
+    unsigned char data_0001_0200[4096]; // 4k for extra state from v1.2
+
+    size_t savestateSize;
+    unsigned char *savestateData, *curr;
+
+    SDL_LockMutex(savestates_lock);
+
+    f = gzopen(filepath, "rb");
+    if(f==NULL)
+    {
+        main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "Could not open state file: %s", filepath);
+        SDL_UnlockMutex(savestates_lock);
+        return 0;
+    }
+
+    /* Read and check Mupen64Plus magic number. */
+    if (gzread(f, header, 44) != 44)
+    {
+        main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "Could not read header from state file %s", filepath);
+        gzclose(f);
+        SDL_UnlockMutex(savestates_lock);
+        return 0;
+    }
+    curr = header;
+
+    if(strncmp((char *)curr, savestate_magic, 8)!=0)
+    {
+        main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "State file: %s is not a valid Mupen64plus savestate.", filepath);
+        gzclose(f);
+        SDL_UnlockMutex(savestates_lock);
+        return 0;
+    }
+    curr += 8;
+
+    version = *curr++;
+    version = (version << 8) | *curr++;
+    version = (version << 8) | *curr++;
+    version = (version << 8) | *curr++;
+    if((version >> 16) != (savestate_latest_version >> 16))
+    {
+        main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "State version (%08x) isn't compatible. Please update Mupen64Plus.", version);
+        gzclose(f);
+        SDL_UnlockMutex(savestates_lock);
+        return 0;
+    }
+
+    if(memcmp((char *)curr, ROM_SETTINGS.MD5, 32))
+    {
+        main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "State ROM MD5 does not match current ROM.");
+        gzclose(f);
+        SDL_UnlockMutex(savestates_lock);
+        return 0;
+    }
+    curr += 32;
+
+    /* Read the rest of the savestate */
+    savestateSize = 16788244;
+    savestateData = curr = (unsigned char *)malloc(savestateSize);
+    if (savestateData == NULL)
+    {
+        main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "Insufficient memory to load state.");
+        gzclose(f);
+        SDL_UnlockMutex(savestates_lock);
+        return 0;
+    }
+    if (version == 0x00010000) /* original savestate version */
+    {
+        if (gzread(f, savestateData, savestateSize) != (int)savestateSize ||
+            (gzread(f, queue, sizeof(queue)) % 4) != 0)
+        {
+            main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "Could not read Mupen64Plus savestate 1.0 data from %s", filepath);
+            free(savestateData);
+            gzclose(f);
+            SDL_UnlockMutex(savestates_lock);
+            return 0;
+        }
+    }
+    else if (version == 0x00010100) // saves entire eventqueue plus 4-byte using_tlb flags
+    {
+        if (gzread(f, savestateData, savestateSize) != (int)savestateSize ||
+            gzread(f, queue, sizeof(queue)) != sizeof(queue) ||
+            gzread(f, using_tlb_data, sizeof(using_tlb_data)) != sizeof(using_tlb_data))
+        {
+            main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "Could not read Mupen64Plus savestate 1.1 data from %s", filepath);
+            free(savestateData);
+            gzclose(f);
+            SDL_UnlockMutex(savestates_lock);
+            return 0;
+        }
+    }
+    else // version >= 0x00010200  saves entire eventqueue, 4-byte using_tlb flags and extra state
+    {
+        if (gzread(f, savestateData, savestateSize) != (int)savestateSize ||
+            gzread(f, queue, sizeof(queue)) != sizeof(queue) ||
+            gzread(f, using_tlb_data, sizeof(using_tlb_data)) != sizeof(using_tlb_data) ||
+            gzread(f, data_0001_0200, sizeof(data_0001_0200)) != sizeof(data_0001_0200))
+        {
+            main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "Could not read Mupen64Plus savestate 1.2+ data from %s", filepath);
+            free(savestateData);
+            gzclose(f);
+            SDL_UnlockMutex(savestates_lock);
+            return 0;
+        }
+    }
+
+    gzclose(f);
+    SDL_UnlockMutex(savestates_lock);
+
+    savestates_load_m64p_mem(dev, curr, version, &using_tlb_data, &data_0001_0200);
 
     free(savestateData);
     main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "State loaded from: %s", namefrompath(filepath));

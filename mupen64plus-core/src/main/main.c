@@ -804,7 +804,12 @@ void new_frame(void)
 
     /* advance the current frame */
     l_CurrentFrame++;
-    savestates_save_m64p_mem(&g_dev, saveAddress);
+
+    if (l_CurrentFrame % 60 == 0) {
+        // savestates_load_m64p_mem(&g_dev, saveAddress, 0x00010700, NULL, NULL);
+    } else if (l_CurrentFrame % 20 == 0) {
+        savestates_save_m64p_mem(&g_dev, saveAddress);
+    }
 
     if (l_FrameAdvance) {
         g_rom_pause = 1;
