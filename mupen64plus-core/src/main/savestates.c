@@ -819,11 +819,11 @@ static int savestates_load_m64p_dev(struct device* dev, char* curr, unsigned int
 
     *r4300_cp0_last_addr(&dev->r4300.cp0) = *r4300_pc(&dev->r4300);
 
-    clock_gettime(CLOCK_REALTIME, &end);
-    long endMs = round(end.tv_nsec / 1.0e6);
-    long beginMs = round(begin.tv_nsec / 1.0e6);
-    printf("Load state: %ld ms\n", endMs - beginMs);
-    fflush(stdout);
+    // clock_gettime(CLOCK_REALTIME, &end);
+    // long endMs = round(end.tv_nsec / 1.0e6);
+    // long beginMs = round(begin.tv_nsec / 1.0e6);
+    // printf("Load state: %ld ms\n", endMs - beginMs);
+    // fflush(stdout);
 }
 
 int savestates_load_m64p_mem(struct device* dev, char* curr)
@@ -837,12 +837,6 @@ int savestates_load_m64p_mem(struct device* dev, char* curr)
     // char queue[1024];
     size_t savestateSize = 16788244;
 
-    // Skip the magic number
-    if(strncmp(curr, savestate_magic, 8)!=0)
-    {
-        printf("State is not a valid Mupen64plus savestate.");
-    }
-
     // Skip the magic string
     curr += 8;
 
@@ -851,11 +845,10 @@ int savestates_load_m64p_mem(struct device* dev, char* curr)
     version = (version << 8) | *curr++;
     version = (version << 8) | *curr++;
 
-    printf("Version: expected: %#08x, actual: %#08x\n", 0x00010700, version);
     fflush(stdout);
 
     // Skip the rest of the header
-    curr += 36;
+    curr += 32;
 
     // Skip the savestate to determine queue address
     queue = curr + savestateSize;
@@ -1918,9 +1911,9 @@ int savestates_save_m64p_mem(const struct device* dev, char* curr)
     PUTDATA(curr, uint32_t, dev->sp.fifo[1].memaddr);
     PUTDATA(curr, uint32_t, dev->sp.fifo[1].dramaddr);
 
-    clock_gettime(CLOCK_REALTIME, &end);
-    long endMs = round(end.tv_nsec / 1.0e6);
-    long beginMs = round(begin.tv_nsec / 1.0e6);
+    // clock_gettime(CLOCK_REALTIME, &end);
+    // long endMs = round(end.tv_nsec / 1.0e6);
+    // long beginMs = round(begin.tv_nsec / 1.0e6);
     // printf("Save time: %ld ms\n", endMs - beginMs);
     // fflush(stdout);
 
