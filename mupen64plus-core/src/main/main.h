@@ -55,6 +55,10 @@ extern m64p_frame_callback g_FrameCallback;
 
 extern int g_gs_vi_counter;
 
+extern int fast_forwarding_frame;
+
+extern int l_CurrentFrame;
+
 const char* get_savestatepath(void);
 const char* get_savesrampath(void);
 

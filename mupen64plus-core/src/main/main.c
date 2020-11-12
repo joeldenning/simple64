@@ -116,8 +116,11 @@ m64p_media_loader g_media_loader;
 
 int g_gs_vi_counter = 0;
 
+int fast_forwarding_frame = -100;
+struct timespec rollback_start, rollback_end;
+
 /** static (local) variables **/
-static int   l_CurrentFrame = 0;         // frame counter
+int   l_CurrentFrame = 0;         // frame counter
 static int   l_TakeScreenshot = 0;       // Tell OSD Rendering callback to take a screenshot just before drawing the OSD
 static int   l_SpeedFactor = 100;        // percentage of nominal game speed at which emulator is running
 static int   l_FrameAdvance = 0;         // variable to check if we pause on next frame
@@ -578,7 +581,7 @@ m64p_error main_core_state_query(m64p_core_param param, int *rval)
         case M64CORE_AUDIO_VOLUME:
         {
             if (!g_EmulatorRunning)
-                return M64ERR_INVALID_STATE;    
+                return M64ERR_INVALID_STATE;
             return main_volume_get_level(rval);
         }
         case M64CORE_AUDIO_MUTE:
@@ -606,7 +609,7 @@ m64p_error main_core_state_set(m64p_core_param param, int val)
             if (!g_EmulatorRunning)
                 return M64ERR_INVALID_STATE;
             if (val == M64EMU_STOPPED)
-            {        
+            {
                 /* this stop function is asynchronous.  The emulator may not terminate until later */
                 main_stop();
                 return M64ERR_SUCCESS;
@@ -618,7 +621,7 @@ m64p_error main_core_state_set(m64p_core_param param, int val)
                 return M64ERR_SUCCESS;
             }
             else if (val == M64EMU_PAUSED)
-            {    
+            {
                 if (!main_is_paused())
                     main_toggle_pause();
                 return M64ERR_SUCCESS;
@@ -805,10 +808,28 @@ void new_frame(void)
     /* advance the current frame */
     l_CurrentFrame++;
 
-    if (l_CurrentFrame % 60 == 0) {
-        savestates_load_m64p_mem(&g_dev, save_address);
-    } else if (l_CurrentFrame % 20 == 0) {
-        savestates_save_m64p_mem(&g_dev, save_address);
+    if (fast_forwarding_frame >= 0) {
+        // we are fast forwarding
+        if (l_CurrentFrame == fast_forwarding_frame + 20) {
+            clock_gettime(CLOCK_REALTIME, &rollback_end);
+            long endMs = round(rollback_end.tv_nsec / 1.0e6);
+            long beginMs = round(rollback_start.tv_nsec / 1.0e6);
+            printf("Finished rollback %i - from %ld ms to %ld ms - Rollback time: %ld ms\n", l_CurrentFrame - 20, rollback_start.tv_nsec, rollback_end.tv_nsec, endMs - beginMs);
+            fflush(stdout);
+            fast_forwarding_frame = -100;
+            main_core_state_set(M64CORE_SPEED_LIMITER, 1);
+        }
+    } else {
+        if (l_CurrentFrame % 60 == 0) {
+            savestates_load_m64p_mem(&g_dev, save_address);
+            fast_forwarding_frame = l_CurrentFrame;
+            clock_gettime(CLOCK_REALTIME, &rollback_start);
+            printf("Starting rollback on frame %i - %ld ms\n", l_CurrentFrame, rollback_start.tv_nsec);
+            // now fast forward 20 frames
+            main_core_state_set(M64CORE_SPEED_LIMITER, 0);
+        } else if (l_CurrentFrame % 20 == 0) {
+            savestates_save_m64p_mem(&g_dev, save_address);
+        }
     }
 
     if (l_FrameAdvance) {

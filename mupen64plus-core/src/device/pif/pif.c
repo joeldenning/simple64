@@ -35,6 +35,7 @@
 #include "device/rcp/si/si_controller.h"
 #include "plugin/plugin.h"
 #include "main/netplay.h"
+#include "main/main.h"
 
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
@@ -367,6 +368,11 @@ void process_pif_ram(struct pif* pif)
     pif->ram[0x3f] &= ~clrmask;
 }
 
+// int captured_inputs_arr_size = (sizeof(struct pif)) * 20;
+// char *last_20_input_frames = malloc(captured_inputs_arr_size);
+struct pif last_20_input_frames[20];
+int input_frame_index = 0;
+
 void update_pif_ram(struct pif* pif)
 {
     size_t k;
@@ -376,9 +382,22 @@ void update_pif_ram(struct pif* pif)
         process_channel(&pif->channels[k]);
     }
 
-    /* Zilmar-Spec plugin expect a call with control_id = -1 when RAM processing is done */
-    if (input.readController) {
-        input.readController(-1, NULL);
+    int rolling_back = fast_forwarding_frame >= 0;
+    if (rolling_back) {
+        int first_rollback_index = input_frame_index % 20;
+        int current_frame_index = l_CurrentFrame - fast_forwarding_frame;
+        int rollback_input_index = (first_rollback_index + current_frame_index) % 20;
+        printf("Providing replayed rollback input: %i\n", rollback_input_index);
+        memcpy(pif, &last_20_input_frames[rollback_input_index], sizeof(pif));
+    } else {
+        /* Zilmar-Spec plugin expect a call with control_id = -1 when RAM processing is done */
+        if (input.readController) {
+            input.readController(-1, NULL);
+        }
+
+        printf("input_frame_index: %i, l_CurrentFrame: %i\n", input_frame_index, l_CurrentFrame);
+        memcpy(&last_20_input_frames[input_frame_index], pif, sizeof(pif));
+        input_frame_index = (input_frame_index + 1) % 20;
     }
 
     netplay_update_input(pif);

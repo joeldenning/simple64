@@ -828,7 +828,6 @@ static int savestates_load_m64p_dev(struct device* dev, char* curr, unsigned int
 
 int savestates_load_m64p_mem(struct device* dev, char* curr)
 {
-    printf("First bytes: %.*s", 8, curr);
     unsigned int version;
     unsigned char *using_tlb_data, *data_0001_0200;
     char *queue;

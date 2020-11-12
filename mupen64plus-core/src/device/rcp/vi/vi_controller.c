@@ -159,8 +159,14 @@ void vi_vertical_interrupt_event(void* opaque)
     struct vi_controller* vi = (struct vi_controller*)opaque;
     if (vi->dp->do_on_unfreeze & DELAY_DP_INT)
         vi->dp->do_on_unfreeze |= DELAY_UPDATESCREEN;
-    else
-        gfx.updateScreen();
+    else {
+        int speed_limiter_on;
+        main_core_state_query(M64CORE_SPEED_LIMITER, &speed_limiter_on);
+
+        if (speed_limiter_on == 1) {
+            gfx.updateScreen();
+        }
+    }
 
     /* allow main module to do things on VI event */
     new_vi();
