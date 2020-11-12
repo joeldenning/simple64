@@ -394,7 +394,7 @@ void main_set_fastforward(int enable)
     {
         ff_state = 1; /* activate fast-forward */
         SavedSpeedFactor = l_SpeedFactor;
-        l_SpeedFactor = 250;
+        l_SpeedFactor = 999;
         audio.setSpeedFactor(l_SpeedFactor);
         StateChanged(M64CORE_SPEED_FACTOR, l_SpeedFactor);
         // set fast-forward indicator
@@ -810,14 +810,16 @@ void new_frame(void)
 
     if (fast_forwarding_frame >= 0) {
         // we are fast forwarding
-        if (l_CurrentFrame == fast_forwarding_frame + 20) {
+        if (l_CurrentFrame == fast_forwarding_frame + 5) {
             clock_gettime(CLOCK_REALTIME, &rollback_end);
             long endMs = round(rollback_end.tv_nsec / 1.0e6);
             long beginMs = round(rollback_start.tv_nsec / 1.0e6);
-            printf("Finished rollback %i - from %ld ms to %ld ms - Rollback time: %ld ms\n", l_CurrentFrame - 20, rollback_start.tv_nsec, rollback_end.tv_nsec, endMs - beginMs);
+            printf("Finished rollback on frame %i - from %ld ms to %ld ms - Rollback time: %ld ms\n", l_CurrentFrame - 5, rollback_start.tv_nsec, rollback_end.tv_nsec, endMs - beginMs);
             fflush(stdout);
             fast_forwarding_frame = -100;
-            main_core_state_set(M64CORE_SPEED_LIMITER, 1);
+            main_set_fastforward(0);
+            main_speedset(100);
+            // main_core_state_set(M64CORE_SPEED_LIMITER, 1);
         }
     } else {
         if (l_CurrentFrame % 60 == 0) {
@@ -825,9 +827,11 @@ void new_frame(void)
             fast_forwarding_frame = l_CurrentFrame;
             clock_gettime(CLOCK_REALTIME, &rollback_start);
             printf("Starting rollback on frame %i - %ld ms\n", l_CurrentFrame, rollback_start.tv_nsec);
-            // now fast forward 20 frames
-            main_core_state_set(M64CORE_SPEED_LIMITER, 0);
-        } else if (l_CurrentFrame % 20 == 0) {
+            // now fast forward
+            main_set_fastforward(1);
+            main_speedset(999);
+            // main_core_state_set(M64CORE_SPEED_LIMITER, 0);
+        } else if (l_CurrentFrame % 60 == 55) {
             savestates_save_m64p_mem(&g_dev, save_address);
         }
     }

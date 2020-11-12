@@ -2,7 +2,7 @@
 
 set -e
 
-export DEBUG=1
+# export DEBUG=1
 
 UNAME=$(uname -s)
 if [[ $UNAME == *"MINGW"* ]]; then
@@ -26,7 +26,8 @@ mkdir -p $install_dir
 base_dir=$PWD
 
 cd $base_dir/mupen64plus-core/projects/unix
-DEBUG=1 make NETPLAY=1 OSD=0 NO_ASM=1 -j4 all
+# DEBUG=1 make NETPLAY=1 OSD=0 NO_ASM=1 -j4 all
+make NETPLAY=1 OSD=0 NO_ASM=1 -j4 all
 cp -P $base_dir/mupen64plus-core/projects/unix/*$suffix* $install_dir
 cp $base_dir/mupen64plus-core/data/* $install_dir
 

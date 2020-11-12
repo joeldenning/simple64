@@ -387,7 +387,7 @@ void update_pif_ram(struct pif* pif)
         int first_rollback_index = input_frame_index % 20;
         int current_frame_index = l_CurrentFrame - fast_forwarding_frame;
         int rollback_input_index = (first_rollback_index + current_frame_index) % 20;
-        printf("Providing replayed rollback input: %i\n", rollback_input_index);
+        // printf("Providing replayed rollback input: %i\n", rollback_input_index);
         memcpy(pif, &last_20_input_frames[rollback_input_index], sizeof(pif));
     } else {
         /* Zilmar-Spec plugin expect a call with control_id = -1 when RAM processing is done */
@@ -395,7 +395,7 @@ void update_pif_ram(struct pif* pif)
             input.readController(-1, NULL);
         }
 
-        printf("input_frame_index: %i, l_CurrentFrame: %i\n", input_frame_index, l_CurrentFrame);
+        // printf("input_frame_index: %i, l_CurrentFrame: %i\n", input_frame_index, l_CurrentFrame);
         memcpy(&last_20_input_frames[input_frame_index], pif, sizeof(pif));
         input_frame_index = (input_frame_index + 1) % 20;
     }
