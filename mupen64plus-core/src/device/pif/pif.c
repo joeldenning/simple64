@@ -19,6 +19,8 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.          *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+#include <stdio.h>
+#include <stdlib.h>
 #include "pif.h"
 #include "n64_cic_nus_6105.h"
 
@@ -370,23 +372,30 @@ void process_pif_ram(struct pif* pif)
 
 // int captured_inputs_arr_size = (sizeof(struct pif)) * 20;
 // char *last_20_input_frames = malloc(captured_inputs_arr_size);
-struct pif last_20_input_frames[20];
-int input_frame_index = 0;
-int last_saved_frame = -1;
+static int rollback_size = 2;
+static uint8_t *saved_input_frames;
+
+static int input_frame_index = 0;
+static int last_saved_frame = -1;
 
 void update_pif_ram(struct pif* pif)
 {
+    if (!saved_input_frames) {
+        saved_input_frames = malloc(PIF_RAM_SIZE * rollback_size);
+    }
+
     int rolling_back = fast_forwarding_frame >= 0;
     if (rolling_back) {
-        int first_rollback_index = input_frame_index % 20;
+        int first_rollback_index = input_frame_index % rollback_size;
         int current_frame_index = l_CurrentFrame - fast_forwarding_frame;
-        int rollback_input_index = (first_rollback_index + current_frame_index) % 20;
-        rollback_input_index -= 2;
+        int rollback_input_index = (first_rollback_index + current_frame_index) % rollback_size;
+        rollback_input_index -= rollback_size;
         if (rollback_input_index < 0) {
-            rollback_input_index += 20;
+            rollback_input_index += rollback_size;
         }
-        printf("Providing replayed rollback input: %i %i %i\n", l_CurrentFrame, fast_forwarding_frame, rollback_input_index);
-        memcpy(pif, &last_20_input_frames[rollback_input_index], sizeof(pif));
+        // printf("Providing replayed rollback input: %i %i %i\n", l_CurrentFrame, fast_forwarding_frame, rollback_input_index);
+        // fflush(stdout);
+        memcpy(pif->ram, saved_input_frames + (rollback_input_index * PIF_RAM_SIZE), PIF_RAM_SIZE);
     } else {
         size_t k;
 
@@ -402,11 +411,12 @@ void update_pif_ram(struct pif* pif)
 
         if (l_CurrentFrame > last_saved_frame) {
             // printf("input_frame_index: %i, l_CurrentFrame: %i\n", input_frame_index, l_CurrentFrame);
-            memcpy(&last_20_input_frames[input_frame_index], pif, sizeof(pif));
-            input_frame_index = (input_frame_index + 1) % 20;
+            // fflush(stdout);
+            memcpy(saved_input_frames + (input_frame_index * PIF_RAM_SIZE), pif->ram, PIF_RAM_SIZE);
+            input_frame_index = (input_frame_index + 1) % rollback_size;
             last_saved_frame = l_CurrentFrame;
         } else {
-            printf("Skipping save index\n");
+            // printf("Skipping save index\n");
         }
     }
 

@@ -816,8 +816,8 @@ void new_frame(void)
             clock_gettime(CLOCK_REALTIME, &rollback_end);
             long endMs = round(rollback_end.tv_nsec / 1.0e6);
             long beginMs = round(rollback_start.tv_nsec / 1.0e6);
-            printf("Finished rollback on frame %i - %ld ms\n", l_CurrentFrame - frames_to_rollback, endMs - beginMs);
-            fflush(stdout);
+            // printf("Finished rollback on frame %i - %ld ms\n", l_CurrentFrame - frames_to_rollback, endMs - beginMs);
+            // fflush(stdout);
             fast_forwarding_frame = -1;
             main_core_state_set(M64CORE_SPEED_LIMITER, 1);
         }
@@ -826,10 +826,10 @@ void new_frame(void)
             savestates_load_m64p_mem(&g_dev, save_address);
             fast_forwarding_frame = l_CurrentFrame;
             clock_gettime(CLOCK_REALTIME, &rollback_start);
-            printf("Starting rollback on frame %i - %ld ms\n", l_CurrentFrame, rollback_start.tv_nsec);
+            // printf("Starting rollback on frame %i - %ld ms\n", l_CurrentFrame, rollback_start.tv_nsec);
             main_core_state_set(M64CORE_SPEED_LIMITER, 0);
         } else if (l_CurrentFrame % 60 == 60 - frames_to_rollback) {
-            printf("Saving state on frame %i\n", l_CurrentFrame);
+            // printf("Saving state on frame %i\n", l_CurrentFrame);
             savestates_save_m64p_mem(&g_dev, save_address);
         }
     }
