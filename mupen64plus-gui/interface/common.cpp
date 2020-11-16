@@ -237,7 +237,7 @@ static void loadPif()
     }
 }
 
-m64p_error launchGame(QString netplay_ip, int netplay_port, int netplay_player)
+m64p_error launchGame(QString netplay_ip, int netplay_port, int netplay_player, int input_delay)
 {
     if (!netplay_port)
         loadPif();
@@ -276,6 +276,16 @@ m64p_error launchGame(QString netplay_ip, int netplay_port, int netplay_player)
 
             if ((*CoreDoCommand)(M64CMD_NETPLAY_INIT, netplay_port, netplay_ip.toLocal8Bit().data()) == M64ERR_SUCCESS)
                 DebugMessage(M64MSG_INFO, "Netplay: init success");
+
+            if (input_delay >= 0) {
+                printf("Setting input delay\n");
+                if ((*CoreDoCommand)(M64CMD_NETPLAY_SET_INPUT_DELAY, input_delay, NULL)) {
+                    DebugMessage(M64MSG_INFO, "Netplay: set input delay success");
+                }
+            } else {
+                printf("Not setting input delay\n");
+            }
+
 
             uint32_t reg_id = 0;
             while (reg_id == 0)
