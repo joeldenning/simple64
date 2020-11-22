@@ -12,7 +12,6 @@ WaitRoom::WaitRoom(QString filename, QJsonObject room, QWebSocket *socket, QWidg
     player_name = room.value("player_name").toString();
     room_port = room.value("port").toInt();
     room_name = room.value("room_name").toString();
-    printf("Room input_delay %i\n", room.value("input_delay").toInt());
     input_delay = room.value("input_delay").toInt();
     file_name = filename;
     started = 0;
@@ -230,9 +229,9 @@ void WaitRoom::processBinaryMessage(QByteArray message)
     {
         started = 1;
 #ifndef SINGLE_THREAD
-        w->openROM(file_name, webSocket->peerAddress().toString(), room_port, player_number, input_delay);
+        w->openROM(file_name, webSocket->peerAddress().toString(), room_port, player_number);
 #else
-        w->singleThreadLaunch(file_name, webSocket->peerAddress().toString(), room_port, player_number, input_delay);
+        w->singleThreadLaunch(file_name, webSocket->peerAddress().toString(), room_port, player_number);
 #endif
         accept();
     }

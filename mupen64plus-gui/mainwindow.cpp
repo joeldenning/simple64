@@ -752,7 +752,7 @@ void MainWindow::updateOpenRecent()
 #ifndef SINGLE_THREAD
                     openROM(temp_recent->text(), "", 0, -1);
 #else
-                    singleThreadLaunch(temp_recent->text(), "", 0, 0, -1);
+                    singleThreadLaunch(temp_recent->text(), "", 0, 0);
 #endif
                 });
     }
@@ -821,13 +821,13 @@ void MainWindow::resetCore()
 }
 
 #ifdef SINGLE_THREAD
-void MainWindow::singleThreadLaunch(QString filename, QString netplay_ip, int netplay_port, int netplay_player, int input_delay)
+void MainWindow::singleThreadLaunch(QString filename, QString netplay_ip, int netplay_port, int netplay_player)
 {
-    QTimer::singleShot(1000, [=]() { openROM(filename, netplay_ip, netplay_port, netplay_player, input_delay); } );
+    QTimer::singleShot(1000, [=]() { openROM(filename, netplay_ip, netplay_port, netplay_player); } );
 }
 #endif
 
-void MainWindow::openROM(QString filename, QString netplay_ip, int netplay_port, int netplay_player, int input_delay)
+void MainWindow::openROM(QString filename, QString netplay_ip, int netplay_port, int netplay_player)
 {
 #ifdef SINGLE_THREAD
     int response;
@@ -847,7 +847,7 @@ void MainWindow::openROM(QString filename, QString netplay_ip, int netplay_port,
 
     resetCore();
 
-    workerThread = new WorkerThread(netplay_ip, netplay_port, netplay_player, input_delay, this);
+    workerThread = new WorkerThread(netplay_ip, netplay_port, netplay_player, this);
     workerThread->setFileName(filename);
 
     QStringList list;
@@ -871,9 +871,9 @@ void MainWindow::on_actionOpen_ROM_triggered()
         QFileInfo info(filename);
         settings->setValue("ROMdir", info.absoluteDir().absolutePath());
 #ifndef SINGLE_THREAD
-        openROM(filename, "", 0, 0, -1);
+        openROM(filename, "", 0, 0);
 #else
-        singleThreadLaunch(filename, "", 0, 0, -1);
+        singleThreadLaunch(filename, "", 0, 0);
 #endif
     }
 }
