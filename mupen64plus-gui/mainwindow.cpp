@@ -750,7 +750,7 @@ void MainWindow::updateOpenRecent()
         QAction *temp_recent = recent[i];
         connect(temp_recent, &QAction::triggered,[=](){
 #ifndef SINGLE_THREAD
-                    openROM(temp_recent->text(), "", 0, -1);
+                    openROM(temp_recent->text(), "", 0, 0);
 #else
                     singleThreadLaunch(temp_recent->text(), "", 0, 0);
 #endif

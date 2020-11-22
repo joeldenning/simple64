@@ -277,7 +277,6 @@ m64p_error launchGame(QString netplay_ip, int netplay_port, int netplay_player)
             if ((*CoreDoCommand)(M64CMD_NETPLAY_INIT, netplay_port, netplay_ip.toLocal8Bit().data()) == M64ERR_SUCCESS)
                 DebugMessage(M64MSG_INFO, "Netplay: init success");
 
-
             uint32_t reg_id = 0;
             while (reg_id == 0)
             {
