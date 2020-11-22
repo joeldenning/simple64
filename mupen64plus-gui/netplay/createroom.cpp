@@ -163,7 +163,6 @@ void CreateRoom::onConnected()
     json.insert("client_sha", QStringLiteral(GUI_VERSION));
     json.insert("netplay_version", NETPLAY_VER);
     json.insert("lle", w->getSettings()->value("LLE").toInt() ? "Yes" : "No");
-    json.insert("use_client_count", true);
     json.insert("input_delay", inputDelay->text().toInt());
 
     QJsonDocument json_doc(json);
