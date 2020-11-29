@@ -26,6 +26,7 @@
 #include "plugin/plugin.h"
 #include "backends/plugins_compat/plugins_compat.h"
 #include "netplay.h"
+#include "savestates.h"
 
 #include <SDL_net.h>
 #if !defined(WIN32)
@@ -48,6 +49,9 @@ static struct controller_input_compat *l_cin_compats;
 static uint8_t l_plugin[4];
 static uint8_t l_buffer_target;
 static uint8_t l_player_lag[4];
+static char* rollback_states[1];
+static int current_player;
+static char* opponent_inputs[1];
 
 //UDP packet formats
 #define UDP_SEND_KEY_INFO 0
@@ -73,6 +77,11 @@ struct __UDPSocket {
 
 m64p_error netplay_start(const char* host, int port)
 {
+    char queue[1024];
+    int saveSize = 16788288 + sizeof(queue) + 4 + 4096;
+    rollback_states[0] = malloc(saveSize);
+    opponent_inputs[0] = malloc(4);
+
     if (SDLNet_Init() < 0)
     {
         DebugMessage(M64MSG_ERROR, "Netplay: Could not initialize SDL Net library");
@@ -133,6 +142,8 @@ m64p_error netplay_start(const char* host, int port)
 
 m64p_error netplay_stop()
 {
+    free(rollback_states[0]);
+    free(opponent_inputs[0]);
     if (l_udpSocket == NULL)
         return M64ERR_INVALID_STATE;
     else
@@ -366,6 +377,13 @@ static uint32_t netplay_get_input(uint8_t control_id)
         Controls[control_id].Plugin = current->plugin;
         netplay_delete_event(current, control_id);
         ++l_cin_compats[control_id].netplay_count;
+
+        if (control_id != current_player)
+        {
+            // printf("\nSaving input for player %i", control_id);
+            // fflush(stdout);
+            memcpy(opponent_inputs[0], &keys, 4);
+        }
     }
     else
     {
@@ -388,6 +406,7 @@ static void netplay_send_input(uint8_t control_id, uint32_t keys)
     packet->len = 11;
     SDLNet_UDP_Send(l_udpSocket, l_udpChannel, packet);
     SDLNet_FreePacket(packet);
+    savestates_save_m64p_mem(&g_dev, rollback_states[0]);
 }
 
 uint8_t netplay_register_player(uint8_t player, uint8_t plugin, uint8_t rawdata, uint32_t reg_id)
@@ -662,6 +681,7 @@ void netplay_set_plugin(uint8_t control_id, uint8_t plugin)
 
 m64p_error netplay_send_config(char* data, int size)
 {
+    current_player = 0;
     if (!netplay_is_init())
         return M64ERR_NOT_INIT;
 
@@ -678,6 +698,7 @@ m64p_error netplay_send_config(char* data, int size)
 
 m64p_error netplay_receive_config(char* data, int size)
 {
+    current_player = 1;
     if (!netplay_is_init())
         return M64ERR_NOT_INIT;
 

@@ -96,7 +96,7 @@ m64p_frame_callback g_FrameCallback = NULL;
 int         g_RomWordsLittleEndian = 0; // after loading, ROM words are in native N64 byte order (big endian). We will swap them on x86
 int         g_EmulatorRunning = 0;      // need separate boolean to tell if emulator is running, since --nogui doesn't use a thread
 
-char *save_address;
+// char *save_address;
 
 int g_rom_pause;
 
@@ -188,9 +188,9 @@ static m64p_error init_video_capture_backend(const struct video_capture_backend_
 {
     m64p_error err;
     // temp
-    char queue[1024];
-    int saveSize = 16788288 + sizeof(queue) + 4 + 4096;
-    save_address = malloc(saveSize);
+    // char queue[1024];
+    // int saveSize = 16788288 + sizeof(queue) + 4 + 4096;
+    // save_address = malloc(saveSize);
 
     const char* name = ConfigGetParamString(config, key);
     if (name == NULL) {
@@ -810,29 +810,29 @@ void new_frame(void)
     /* advance the current frame */
     l_CurrentFrame++;
 
-    if (fast_forwarding_frame >= 0) {
-        // we are fast forwarding
-        if (l_CurrentFrame == fast_forwarding_frame + frames_to_rollback) {
-            clock_gettime(CLOCK_REALTIME, &rollback_end);
-            long endMs = round(rollback_end.tv_nsec / 1.0e6);
-            long beginMs = round(rollback_start.tv_nsec / 1.0e6);
-            // printf("Finished rollback on frame %i - %ld ms\n", l_CurrentFrame - frames_to_rollback, endMs - beginMs);
-            // fflush(stdout);
-            fast_forwarding_frame = -1;
-            main_core_state_set(M64CORE_SPEED_LIMITER, 1);
-        }
-    } else {
-        if (l_CurrentFrame % 60 == 0) {
-            savestates_load_m64p_mem(&g_dev, save_address);
-            fast_forwarding_frame = l_CurrentFrame;
-            clock_gettime(CLOCK_REALTIME, &rollback_start);
-            // printf("Starting rollback on frame %i - %ld ms\n", l_CurrentFrame, rollback_start.tv_nsec);
-            main_core_state_set(M64CORE_SPEED_LIMITER, 0);
-        } else if (l_CurrentFrame % 60 == 60 - frames_to_rollback) {
-            // printf("Saving state on frame %i\n", l_CurrentFrame);
-            savestates_save_m64p_mem(&g_dev, save_address);
-        }
-    }
+    // if (fast_forwarding_frame >= 0) {
+    //     // we are fast forwarding
+    //     if (l_CurrentFrame == fast_forwarding_frame + frames_to_rollback) {
+    //         clock_gettime(CLOCK_REALTIME, &rollback_end);
+    //         long endMs = round(rollback_end.tv_nsec / 1.0e6);
+    //         long beginMs = round(rollback_start.tv_nsec / 1.0e6);
+    //         // printf("Finished rollback on frame %i - %ld ms\n", l_CurrentFrame - frames_to_rollback, endMs - beginMs);
+    //         // fflush(stdout);
+    //         fast_forwarding_frame = -1;
+    //         main_core_state_set(M64CORE_SPEED_LIMITER, 1);
+    //     }
+    // } else {
+    //     if (l_CurrentFrame % 60 == 0) {
+    //         savestates_load_m64p_mem(&g_dev, save_address);
+    //         fast_forwarding_frame = l_CurrentFrame;
+    //         clock_gettime(CLOCK_REALTIME, &rollback_start);
+    //         // printf("Starting rollback on frame %i - %ld ms\n", l_CurrentFrame, rollback_start.tv_nsec);
+    //         main_core_state_set(M64CORE_SPEED_LIMITER, 0);
+    //     } else if (l_CurrentFrame % 60 == 60 - frames_to_rollback) {
+    //         // printf("Saving state on frame %i\n", l_CurrentFrame);
+    //         savestates_save_m64p_mem(&g_dev, save_address);
+    //     }
+    // }
 
     if (l_FrameAdvance) {
         g_rom_pause = 1;
