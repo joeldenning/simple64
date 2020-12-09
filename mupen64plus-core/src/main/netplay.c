@@ -34,6 +34,9 @@
 #include <netinet/ip.h>
 #endif
 
+#define ROLLBACK_FRAMES 1
+#define INPUT_DELAY 3
+
 static int l_canFF;
 static int l_netplay_controller;
 static int l_netplay_control[4];
@@ -51,7 +54,8 @@ static uint8_t l_buffer_target;
 static uint8_t l_player_lag[4];
 static char* rollback_states[1];
 static int current_player;
-static char* opponent_inputs[1];
+static struct netplay_event* rollback_inputs[ROLLBACK_FRAMES];
+static uint32_t last_network_count;
 
 //UDP packet formats
 #define UDP_SEND_KEY_INFO 0
@@ -80,7 +84,8 @@ m64p_error netplay_start(const char* host, int port)
     char queue[1024];
     int saveSize = 16788288 + sizeof(queue) + 4 + 4096;
     rollback_states[0] = malloc(saveSize);
-    opponent_inputs[0] = malloc(4);
+    rollback_inputs[0] = NULL;
+    last_network_count = 0;
 
     if (SDLNet_Init() < 0)
     {
@@ -143,7 +148,6 @@ m64p_error netplay_start(const char* host, int port)
 m64p_error netplay_stop()
 {
     free(rollback_states[0]);
-    free(opponent_inputs[0]);
     if (l_udpSocket == NULL)
         return M64ERR_INVALID_STATE;
     else
@@ -229,18 +233,37 @@ static int netplay_require_response(void* opaque)
     //We basically beg the server for input data.
     //After 10 seconds a timeout occurs, we assume we have lost connection to the server.
     uint8_t control_id = *(uint8_t*)opaque;
-    uint32_t timeout = SDL_GetTicks() + 10000;
-    while (!check_valid(control_id, l_cin_compats[control_id].netplay_count))
+    int current_count = l_cin_compats[control_id].netplay_count;
+
+    int frames_ahead_of_network = current_count - last_network_count;
+    printf("Require response\n");
+
+    if (rollback_inputs[0] != NULL && frames_ahead_of_network >= 0 && frames_ahead_of_network < ROLLBACK_FRAMES && control_id != current_player)
     {
-        if (SDL_GetTicks() > timeout)
-        {
-            l_udpChannel = -1;
-            return 0;
-        }
-        netplay_request_input(control_id);
-        SDL_Delay(5);
+        // Copy the last known input from our oppponent, to be used
+        // while we wait on the real input that is on its way from
+        // the server
+        printf("Using last known input for player %i\n", control_id);
+        rollback_inputs[0]->count = current_count;
+        rollback_inputs[0]->next = l_cin_compats[control_id].event_first;
+        l_cin_compats[control_id].event_first = rollback_inputs[0];
+        return 1;
     }
-    return 1;
+    else
+    {
+        uint32_t timeout = SDL_GetTicks() + 10000;
+        while (!check_valid(control_id, l_cin_compats[control_id].netplay_count))
+        {
+            if (SDL_GetTicks() > timeout)
+            {
+                l_udpChannel = -1;
+                return 0;
+            }
+            netplay_request_input(control_id);
+            SDL_Delay(5);
+        }
+        return 1;
+    }
 }
 
 static void netplay_process()
@@ -276,6 +299,12 @@ static void netplay_process()
                 for (uint8_t i = 0; i < packet->data[4]; ++i)
                 {
                     count = SDLNet_Read32(&packet->data[curr]);
+
+                    if (count > last_network_count)
+                    {
+                        last_network_count = count;
+                    }
+
                     curr += 4;
 
                     if (((count - l_cin_compats[player].netplay_count) > (UINT32_MAX / 2)) || (check_valid(player, count))) //event doesn't need to be recorded
@@ -296,6 +325,18 @@ static void netplay_process()
                     new_event->plugin = plugin;
                     new_event->next = l_cin_compats[player].event_first;
                     l_cin_compats[player].event_first = new_event;
+
+                    if (current_player != player)
+                    {
+                        printf("Storing input for player %i\n", player);
+                        fflush(stdout);
+                        struct netplay_event* rollback_event = (struct netplay_event*)malloc(sizeof(struct netplay_event));
+                        new_event->count = count;
+                        new_event->buttons = keys;
+                        new_event->plugin = plugin;
+                        new_event->next = l_cin_compats[player].event_first;
+                        rollback_inputs[0] = rollback_event;
+                    }
                 }
                 break;
             default:
@@ -377,13 +418,6 @@ static uint32_t netplay_get_input(uint8_t control_id)
         Controls[control_id].Plugin = current->plugin;
         netplay_delete_event(current, control_id);
         ++l_cin_compats[control_id].netplay_count;
-
-        if (control_id != current_player)
-        {
-            // printf("\nSaving input for player %i", control_id);
-            // fflush(stdout);
-            memcpy(opponent_inputs[0], &keys, 4);
-        }
     }
     else
     {
@@ -400,13 +434,25 @@ static void netplay_send_input(uint8_t control_id, uint32_t keys)
     UDPpacket *packet = SDLNet_AllocPacket(11);
     packet->data[0] = UDP_SEND_KEY_INFO;
     packet->data[1] = control_id; //player number
-    SDLNet_Write32(l_cin_compats[control_id].netplay_count, &packet->data[2]); // current event count
+    uint32_t count = l_cin_compats[control_id].netplay_count;
+    uint8_t plugin = l_plugin[control_id];
+    SDLNet_Write32(count, &packet->data[2]); // current event count
     SDLNet_Write32(keys, &packet->data[6]); //key data
-    packet->data[10] = l_plugin[control_id]; //current plugin
+    packet->data[10] = plugin; //current plugin
     packet->len = 11;
     SDLNet_UDP_Send(l_udpSocket, l_udpChannel, packet);
     SDLNet_FreePacket(packet);
     savestates_save_m64p_mem(&g_dev, rollback_states[0]);
+
+    if (control_id == current_player)
+    {
+        struct netplay_event* new_event = (struct netplay_event*)malloc(sizeof(struct netplay_event));
+        new_event->count = count + INPUT_DELAY;
+        new_event->buttons = keys;
+        new_event->plugin = plugin;
+        new_event->next = l_cin_compats[control_id].event_first;
+        l_cin_compats[control_id].event_first = new_event;
+    }
 }
 
 uint8_t netplay_register_player(uint8_t player, uint8_t plugin, uint8_t rawdata, uint32_t reg_id)
